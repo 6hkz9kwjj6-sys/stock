@@ -18,17 +18,27 @@ def get_all_bubble_data():
         'FANG': {'ticker': '^NDX', 'start': '2016-07-01', 'end': '2023-07-01'}
     }
     processed_series = {}
+    
     for key, info in tickers.items():
         df = yf.download(info['ticker'], start=info['start'], end=info['end'], progress=False)
+        
         if not df.empty:
-            # 결측치(NaN)가 있으면 제거하여 수치 에러 방지
+            # [★핵심 수정★] 최신 yfinance의 MultiIndex 컬럼 구조를 1단계로 평탄화
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
+            
+            # 이제 'Close' 컬럼에 안전하게 접근 가능하며, 결측치를 제거합니다.
             df = df.dropna(subset=['Close'])
+            
+            # Close 데이터만 복사하여 지수화(Base=100) 진행
             df = df[['Close']].copy()
-            base_value = df.iloc[0]['Close']
+            base_value = float(df.iloc[0]['Close'])
             df['Scaled'] = (df['Close'] / base_value) * 100
+            
             df = df.reset_index()
             df['Years'] = df.index / 252  # 252 영업일 기준 연차 환산
             processed_series[key] = df
+            
     return processed_series
 
 # 데이터 로드
@@ -37,7 +47,7 @@ ai_data = data_dict['AI_Cycle']
 dotcom_data = data_dict['Dotcom']
 fang_data = data_dict['FANG']
 
-# 결측치를 처리했으므로 이제 정상적으로 실시간 수치가 반영됩니다.
+# 실시간 수치 반영
 current_years = ai_data['Years'].iloc[-1]
 current_value = ai_data['Scaled'].iloc[-1]
 
@@ -57,7 +67,7 @@ else:
     color = "#ef4444"
 c3.markdown(f"**현재 국면 진단:** <span style='color:{color}; font-size:20px; font-weight:bold;'>{status}</span>", unsafe_allow_html=True)
 
-# 4. Plotly 인터랙티브 차트 생성 (글자 깨짐 방지 및 색상 수정)
+# 4. Plotly 인터랙티브 차트 생성 (밝고 선명한 네온 초록색 적용)
 st.write("---")
 fig = go.Figure()
 
@@ -79,7 +89,7 @@ fig.add_trace(go.Scatter(
     opacity=0.6
 ))
 
-# 현재 AI 사이클 실시간 주가 (★요청 반영: 밝고 선명한 네온 초록색 두꺼운 선★)
+# 현재 AI 사이클 실시간 주가 (밝고 선명한 네온 초록색 두꺼운 선)
 fig.add_trace(go.Scatter(
     x=ai_data['Years'], 
     y=ai_data['Scaled'], 
