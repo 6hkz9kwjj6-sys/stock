@@ -29,15 +29,17 @@ def get_extended_bubble_data():
             
             df = df.dropna(subset=['Close'])
             df = df[['Close']].copy()
-            base_value = float(df.iloc[0]['Close'])
-            df['Scaled'] = (df['Close'] / base_value) * 100
+            
+            # 명확하게 1차원 Series/Float로 변환하여 할당 에러 방지
+            close_series = pd.Series(df['Close'].values.flatten(), index=df.index)
+            base_value = float(close_series.iloc[0])
+            df['Scaled'] = (close_series / base_value) * 100
             
             # --- [RSI (14일) 안전한 계산] ---
-            delta = df['Close'].diff()
+            delta = close_series.diff()
             gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
             loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-            # 0 분모 방지
-            loss = loss.replace(0, 0.00001)
+            loss = loss.replace(0, 0.00001)  # 0 분모 방지
             rs = gain / loss
             df['RSI'] = 100 - (100 / (1 + rs))
             # ----------------------------------
@@ -95,24 +97,25 @@ else:
 fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
                     vertical_spacing=0.08, row_heights=[0.7, 0.3])
 
+# [★수정 완료] row, col 파라미터를 go.Scatter 안쪽이 아닌 add_trace의 아규먼트로 올바르게 격리
 # [1층] 메인 주가 스케일링 차트
 fig.add_trace(go.Scatter(x=dotcom_data['Years'], y=dotcom_data['Scaled'], name="과거 닷컴 버블 (1995~2002)", line=dict(color='#fbbf24', width=1.5, dash='dot'), opacity=0.5), row=1, col=1)
 fig.add_trace(go.Scatter(x=fang_data['Years'], y=fang_data['Scaled'], name="과거 FANG 장세 (2016~2023)", line=dict(color='#ef4444', width=1.5), opacity=0.5), row=1, col=1)
-fig.add_trace(go.Scatter(x=ai_data['Years'], y=ai_data['Scaled'], name="현재 AI 사이클 (2023~현재)", line=dict(color='#00ff66', width=4), row=1, col=1))
+fig.add_trace(go.Scatter(x=ai_data['Years'], y=ai_data['Scaled'], name="현재 AI 사이클 (2023~현재)", line=dict(color='#00ff66', width=4)), row=1, col=1)
 
-# [★수정] 서브플롯 구조에 맞는 올바른 수직 가이드라인(T+현재 연차) 추가 방식
+# 가이드라인 설정
 fig.add_vline(x=current_years, line_width=1.5, line_dash="dash", line_color="#7f8c8d")
 
 # [2층] 보조 지표 RSI 차트
 fig.add_trace(go.Scatter(x=dotcom_data['Years'], y=dotcom_data['RSI'], name="닷컴 RSI", line=dict(color='#fbbf24', width=1, dash='dot'), opacity=0.4), row=2, col=1)
 fig.add_trace(go.Scatter(x=fang_data['Years'], y=fang_data['RSI'], name="FANG RSI", line=dict(color='#ef4444', width=1), opacity=0.4), row=2, col=1)
-fig.add_trace(go.Scatter(x=ai_data['Years'], y=ai_data['RSI'], name="현재 AI RSI", line=dict(color='#00ff66', width=2), row=2, col=1))
+fig.add_trace(go.Scatter(x=ai_data['Years'], y=ai_data['RSI'], name="현재 AI RSI", line=dict(color='#00ff66', width=2)), row=2, col=1)
 
-# RSI 과매수/과매도 가이드라인 라인 (70, 30)
+# RSI 기준 가이드라인 라인 (70, 30)
 fig.add_hline(y=70, line_width=1, line_dash="dash", line_color="rgba(239, 68, 68, 0.5)", row=2, col=1)
 fig.add_hline(y=30, line_width=1, line_dash="dash", line_color="rgba(16, 185, 129, 0.5)", row=2, col=1)
 
-# [★수정] 개별 축 설정을 위해 update_xaxes 및 update_yaxes 사용
+# 레이아웃 마스터 설정
 fig.update_layout(
     title=dict(text="역사적 버블 실제 등락 vs 현재 AI 위치 및 RSI 심리 지표 크로스 비교", font=dict(size=16)),
     height=750,
@@ -120,13 +123,9 @@ fig.update_layout(
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
 )
 
-# 1층 주가축 (로그 스케일 적용)
+# 축별 디테일 설정 분리
 fig.update_yaxes(title_text="지수화 주가 (Log Scale)", type="log", tickvals=[100, 200, 400, 800], tickformat="d", gridcolor='rgba(128,128,128,0.2)', row=1, col=1)
-
-# 2층 RSI축 
 fig.update_yaxes(title_text="RSI (심리 강도)", range=[10, 90], gridcolor='rgba(128,128,128,0.2)', row=2, col=1)
-
-# 공통 X축 설정
 fig.update_xaxes(title_text="진행 시간 (연차: T + n Year)", range=[0, 7], gridcolor='rgba(128,128,128,0.2)', row=2, col=1)
 
 st.plotly_chart(fig, use_container_width=True)
